@@ -197,6 +197,25 @@
     color: #2ed573;
   }
 
+  /* スワイプ確定時の絵文字エフェクト */
+  .swipe-emoji {
+    position: fixed;
+    top: 45%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.3);
+    font-size: 100px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 150;
+    animation: emojiPop 0.8s ease-out forwards;
+  }
+  @keyframes emojiPop {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+    30% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+    60% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -60%) scale(1.1); }
+  }
+
   /* 下部ボタン */
   #buttons {
     padding: 10px 40px 30px;
@@ -578,10 +597,20 @@ function setupSwipe(card) {
   });
 }
 
+function showSwipeEmoji(direction) {
+  const emoji = document.createElement('div');
+  emoji.className = 'swipe-emoji';
+  emoji.textContent = direction === 'right' ? '\u{1FAF6}' : '\u{1F44E}';
+  document.body.appendChild(emoji);
+  setTimeout(() => emoji.remove(), 850);
+}
+
 function flyOut(card, direction, velocity) {
   const speed = Math.max(Math.abs(velocity || 0), 0.8);
   const flyX = direction === 'right' ? window.innerWidth * 1.5 : -window.innerWidth * 1.5;
   const rotate = direction === 'right' ? 20 + speed * 10 : -(20 + speed * 10);
+
+  showSwipeEmoji(direction);
 
   card.classList.add('fly-out');
   card.style.transform = `translateX(${flyX}px) rotate(${rotate}deg)`;
