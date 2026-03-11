@@ -352,6 +352,64 @@
     box-shadow: 0 4px 20px rgba(238,90,36,0.3);
   }
 
+  /* 投稿ボタン */
+  .submit-section {
+    margin-top: 24px;
+    text-align: center;
+  }
+  .submit-section .divider {
+    font-size: 13px;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 14px;
+  }
+  .submit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+  .submit-btn:active { transform: scale(0.95); background: rgba(255,255,255,0.15); }
+  .submit-btn .camera-icon { font-size: 18px; }
+
+  /* カード上の投稿者情報 */
+  .card-info {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 40px 16px 14px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.7));
+    pointer-events: none;
+  }
+  .card-info .poster-name {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .card-info .poster-comment {
+    font-size: 12px;
+    opacity: 0.8;
+    line-height: 1.4;
+  }
+  .card-info .user-badge {
+    display: inline-block;
+    background: rgba(255,107,107,0.8);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
   /* カウンター */
   #counter {
     position: absolute;
@@ -421,6 +479,13 @@
     <button class="result-btn" id="btn-yes">はい、出会えました</button>
     <button class="result-btn" id="btn-no">いいえ、まだ探しに行きます</button>
   </div>
+  <div class="submit-section">
+    <div class="divider">- - -</div>
+    <a href="GOOGLE_FORM_URL" target="_blank" rel="noopener" class="submit-btn" id="submit-photo-btn">
+      <span class="camera-icon">📸</span>
+      あなたの84kenを投稿する
+    </a>
+  </div>
 </div>
 
 <script>
@@ -437,6 +502,7 @@ if (!isMobile()) {
 }
 
 // 画像グループ（同じロケーション/シチュエーション）
+// ユーザー投稿写真は group: 'U' で name, comment 付き
 const imageGroups = [
   { group: 'A', files: ['DSC03636.jpg', 'DSC04081.jpg', 'DSC04111.jpg', 'D9KDF3eU8AE_m4Y.jpeg', 'DSC09313.jpg'] },
   { group: 'B', files: ['DSC05600.jpg', 'DSC05613.jpg'] },
@@ -453,11 +519,17 @@ const imageGroups = [
   { group: 'M', files: ['DSC05867.jpg', 'DSC05914.jpg'] },
   { group: 'N', files: ['A7408284.jpg', 'A7408299.jpg', 'A7408393.jpg'] },
   { group: 'O', files: ['84ken-saisai-17.jpg', '84ken-saisai-34.jpg', '84ken-saisai-43.jpg', '84ken-saisai-50.jpg', '84ken-saisai-62.jpg'] },
+  // --- ユーザー投稿写真（承認済み）はここに追加 ---
+  // 例: { group: 'U', files: ['user/user_001.jpg'], name: 'タロウ', comment: '川で最高の一枚' },
 ];
 
-// ファイル→グループのマップ
+// ファイル→グループのマップ & ファイル→メタ情報のマップ
 const fileToGroup = {};
-imageGroups.forEach(g => g.files.forEach(f => { fileToGroup[f] = g.group; }));
+const fileMeta = {};
+imageGroups.forEach(g => g.files.forEach(f => {
+  fileToGroup[f] = g.group;
+  if (g.name) fileMeta[f] = { name: g.name, comment: g.comment || '' };
+}));
 
 function shuffle(arr) {
   const a = [...arr];
@@ -562,8 +634,17 @@ function createCard() {
   // メインカード
   cardEl = document.createElement('div');
   cardEl.className = 'card';
+  const currentFile = images[currentIndex];
+  const meta = fileMeta[currentFile];
+  const infoHTML = meta ? `
+    <div class="card-info">
+      <div class="user-badge">みんなの投稿</div>
+      <div class="poster-name">${meta.name}</div>
+      ${meta.comment ? `<div class="poster-comment">${meta.comment}</div>` : ''}
+    </div>` : '';
   cardEl.innerHTML = `
-    <img src="${images[currentIndex]}" alt="84ken">
+    <img src="${currentFile}" alt="84ken">
+    ${infoHTML}
     <div class="overlay-icon overlay-ng">✕</div>
     <div class="overlay-icon overlay-ok">○</div>
   `;
@@ -785,12 +866,15 @@ function resetGame() {
 }
 
 document.getElementById('btn-yes').addEventListener('click', () => {
-  // 「出会えた」→ お気に入り写真を大きく表示してから終了メッセージ
   const result = document.getElementById('result');
   result.querySelector('h2').innerHTML = 'すてきな出会いに<br>乾杯！🍻';
   document.querySelector('.result-buttons').innerHTML =
     '<button class="result-btn" id="btn-retry" style="background:linear-gradient(135deg,#ff6b6b,#ee5a24);box-shadow:0 4px 20px rgba(238,90,36,0.3)">もう一回やる</button>';
-  document.getElementById('btn-retry').addEventListener('click', resetGame);
+  document.getElementById('btn-retry').addEventListener('click', () => {
+    // 投稿セクションのHTMLを復元
+    document.querySelector('.submit-section').innerHTML = '<div class="divider">- - -</div><a href="GOOGLE_FORM_URL" target="_blank" rel="noopener" class="submit-btn"><span class="camera-icon">📸</span>あなたの84kenを投稿する</a>';
+    resetGame();
+  });
 });
 
 document.getElementById('btn-no').addEventListener('click', () => {
