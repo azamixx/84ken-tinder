@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>84ken Tinder</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+    background: #1a1a2e;
+    color: #fff;
+    overflow: hidden;
+    height: 100dvh;
+    width: 100vw;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* PC警告 */
+  #pc-warning {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #1a1a2e;
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+    padding: 40px;
+  }
+  #pc-warning .icon { font-size: 64px; }
+  #pc-warning h2 { font-size: 22px; font-weight: 700; }
+  #pc-warning p { font-size: 16px; color: #aaa; line-height: 1.6; }
+
+  /* イントロ画面 */
+  #intro {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(160deg, #ff6b6b, #ee5a24, #f0932b);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    text-align: center;
+    padding: 40px 30px;
+    transition: opacity 0.5s, transform 0.5s;
+  }
+  #intro.hide {
+    opacity: 0;
+    transform: scale(0.9);
+    pointer-events: none;
+  }
+  #intro h1 {
+    font-size: 28px;
+    font-weight: 800;
+    margin-bottom: 16px;
+    line-height: 1.4;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  }
+  #intro p {
+    font-size: 16px;
+    line-height: 1.8;
+    opacity: 0.9;
+    margin-bottom: 40px;
+  }
+  #intro .swipe-hint {
+    display: flex;
+    gap: 40px;
+    margin-bottom: 40px;
+  }
+  #intro .hint-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  #intro .hint-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    font-weight: 700;
+  }
+  #intro .hint-icon.ng { background: rgba(255,255,255,0.2); color: #fff; }
+  #intro .hint-icon.ok { background: rgba(255,255,255,0.3); color: #fff; }
+  #intro .hint-label { font-size: 14px; opacity: 0.8; }
+  #intro .hint-arrow { font-size: 12px; opacity: 0.6; }
+  #start-btn {
+    background: #fff;
+    color: #ee5a24;
+    border: none;
+    padding: 16px 50px;
+    border-radius: 50px;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    transition: transform 0.2s;
+  }
+  #start-btn:active { transform: scale(0.95); }
+
+  /* メイン画面 */
+  #app {
+    position: relative;
+    height: 100dvh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* プログレスバー */
+  #progress {
+    padding: 16px 20px 8px;
+    display: flex;
+    gap: 4px;
+  }
+  .progress-dot {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    transition: background 0.3s;
+  }
+  .progress-dot.done { background: #ff6b6b; }
+  .progress-dot.current { background: rgba(255,255,255,0.5); }
+
+  /* カードエリア */
+  #card-area {
+    flex: 1;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px 20px 20px;
+  }
+
+  .card {
+    position: absolute;
+    width: calc(100vw - 40px);
+    max-width: 400px;
+    aspect-ratio: 3/4;
+    max-height: calc(100dvh - 180px);
+    border-radius: 16px;
+    overflow: hidden;
+    background: #2a2a3e;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    will-change: transform;
+    transition: none;
+  }
+  .card.animate {
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+
+  /* ×○ オーバーレイ */
+  .card .overlay-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.5);
+    font-size: 120px;
+    font-weight: 900;
+    opacity: 0;
+    pointer-events: none;
+    text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    transition: none;
+  }
+  .card .overlay-ng {
+    color: #ff4757;
+  }
+  .card .overlay-ok {
+    color: #2ed573;
+  }
+
+  /* 下部ボタン */
+  #buttons {
+    padding: 10px 40px 30px;
+    display: flex;
+    justify-content: center;
+    gap: 50px;
+  }
+  .btn {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 3px solid;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, background 0.15s;
+  }
+  .btn:active { transform: scale(0.9); }
+  .btn-ng {
+    border-color: #ff4757;
+    color: #ff4757;
+  }
+  .btn-ng:active { background: rgba(255,71,87,0.15); }
+  .btn-ok {
+    border-color: #2ed573;
+    color: #2ed573;
+  }
+  .btn-ok:active { background: rgba(46,213,115,0.15); }
+
+  /* 結果画面 */
+  #result {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(160deg, #1a1a2e, #16213e);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 200;
+    text-align: center;
+    padding: 40px 30px;
+  }
+  #result.show {
+    display: flex;
+  }
+  #result h2 {
+    font-size: 26px;
+    font-weight: 800;
+    margin-bottom: 30px;
+    line-height: 1.5;
+  }
+  #result .favorites {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 30px;
+    max-width: 320px;
+  }
+  #result .fav-img {
+    width: 90px;
+    height: 120px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 3px solid #2ed573;
+    box-shadow: 0 4px 15px rgba(46,213,115,0.3);
+  }
+  #result .no-fav {
+    font-size: 16px;
+    color: #aaa;
+    margin-bottom: 20px;
+  }
+  #retry-btn {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+    color: #fff;
+    border: none;
+    padding: 14px 40px;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(238,90,36,0.3);
+  }
+  #retry-btn:active { transform: scale(0.95); }
+
+  /* カウンター */
+  #counter {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 13px;
+    color: rgba(255,255,255,0.4);
+  }
+</style>
+</head>
+<body>
+
+<!-- PC警告 -->
+<div id="pc-warning">
+  <div class="icon">📱</div>
+  <h2>スマホでアクセスしてね！</h2>
+  <p>このアプリはスマートフォン専用です。<br>スマホでQRコードを読み取るか、<br>URLを直接開いてください。</p>
+</div>
+
+<!-- イントロ -->
+<div id="intro">
+  <h1>あなたの84kenに<br>出会えるかも</h1>
+  <p>運命の84kenを見つけよう</p>
+  <div class="swipe-hint">
+    <div class="hint-item">
+      <div class="hint-icon ng">✕</div>
+      <div class="hint-label">NG</div>
+      <div class="hint-arrow">← 左スワイプ</div>
+    </div>
+    <div class="hint-item">
+      <div class="hint-icon ok">○</div>
+      <div class="hint-label">OK!</div>
+      <div class="hint-arrow">右スワイプ →</div>
+    </div>
+  </div>
+  <button id="start-btn">はじめる</button>
+</div>
+
+<!-- メイン -->
+<div id="app">
+  <div id="progress"></div>
+  <div id="card-area">
+    <div id="counter"></div>
+  </div>
+  <div id="buttons">
+    <button class="btn btn-ng" id="btn-ng">✕</button>
+    <button class="btn btn-ok" id="btn-ok">○</button>
+  </div>
+</div>
+
+<!-- 結果 -->
+<div id="result">
+  <h2>お気に入りの84kenは<br>見つかった？</h2>
+  <div class="favorites" id="favorites"></div>
+  <button id="retry-btn">もう一回やる</button>
+</div>
+
+<script>
+// PC判定
+function isMobile() {
+  return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 0 && window.innerWidth < 900);
+}
+
+if (!isMobile()) {
+  document.getElementById('pc-warning').style.display = 'flex';
+  document.getElementById('intro').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+}
+
+// 全画像リスト
+const allImages = [];
+for (let i = 1; i <= 64; i++) {
+  if (i === 10) { // 10番がない場合のスキップ（あれば含める）
+    allImages.push(`84ken-saisai-${i}.jpg`);
+  } else {
+    allImages.push(`84ken-saisai-${i}.jpg`);
+  }
+}
+// 実際に存在するファイルのみ（欠番対応）
+const existingImages = [
+  1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+  21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,
+  41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
+  61,62,63,64
+].map(n => `84ken-saisai-${n}.jpg`);
+
+// シャッフルして10枚選択
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+let images = [];
+let currentIndex = 0;
+let favorites = [];
+let cardEl = null;
+
+const cardArea = document.getElementById('card-area');
+const progressEl = document.getElementById('progress');
+const counterEl = document.getElementById('counter');
+const favoritesEl = document.getElementById('favorites');
+
+function initGame() {
+  images = shuffle(existingImages).slice(0, 10);
+  currentIndex = 0;
+  favorites = [];
+
+  // プリロード
+  images.forEach(src => {
+    const img = new Image();
+    img.src = src;
+  });
+
+  // プログレスバー
+  progressEl.innerHTML = '';
+  for (let i = 0; i < 10; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'progress-dot' + (i === 0 ? ' current' : '');
+    progressEl.appendChild(dot);
+  }
+
+  updateCounter();
+  createCard();
+}
+
+function updateCounter() {
+  counterEl.textContent = `${Math.min(currentIndex + 1, 10)} / 10`;
+}
+
+function updateProgress() {
+  const dots = progressEl.querySelectorAll('.progress-dot');
+  dots.forEach((d, i) => {
+    d.className = 'progress-dot';
+    if (i < currentIndex) d.classList.add('done');
+    else if (i === currentIndex) d.classList.add('current');
+  });
+}
+
+function createCard() {
+  if (currentIndex >= 10) {
+    showResult();
+    return;
+  }
+
+  // 次のカード（裏に見える用）
+  const existingNext = cardArea.querySelector('.card-next');
+  if (existingNext) existingNext.remove();
+
+  if (currentIndex + 1 < 10) {
+    const nextCard = document.createElement('div');
+    nextCard.className = 'card card-next';
+    nextCard.style.transform = 'scale(0.95)';
+    nextCard.style.opacity = '0.5';
+    nextCard.innerHTML = `<img src="${images[currentIndex + 1]}" alt="84ken">`;
+    cardArea.insertBefore(nextCard, cardArea.firstChild);
+  }
+
+  // メインカード
+  cardEl = document.createElement('div');
+  cardEl.className = 'card';
+  cardEl.innerHTML = `
+    <img src="${images[currentIndex]}" alt="84ken">
+    <div class="overlay-icon overlay-ng">✕</div>
+    <div class="overlay-icon overlay-ok">○</div>
+  `;
+  cardArea.appendChild(cardEl);
+
+  setupSwipe(cardEl);
+}
+
+function setupSwipe(card) {
+  let startX = 0, startY = 0, currentX = 0, isDragging = false;
+  const threshold = 80;
+
+  card.addEventListener('touchstart', (e) => {
+    isDragging = true;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    currentX = 0;
+    card.style.transition = 'none';
+  }, { passive: true });
+
+  card.addEventListener('touchmove', (e) => {
+    if (!isDragging) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    currentX = dx;
+
+    const rotate = dx * 0.08;
+    const moveY = Math.abs(dx) * 0.05;
+    card.style.transform = `translateX(${dx}px) translateY(${-moveY}px) rotate(${rotate}deg)`;
+
+    // オーバーレイ表示
+    const ngIcon = card.querySelector('.overlay-ng');
+    const okIcon = card.querySelector('.overlay-ok');
+    const progress = Math.min(Math.abs(dx) / threshold, 1);
+
+    if (dx < 0) {
+      ngIcon.style.opacity = progress * 0.9;
+      ngIcon.style.transform = `translate(-50%, -50%) scale(${0.5 + progress * 0.5})`;
+      okIcon.style.opacity = 0;
+    } else if (dx > 0) {
+      okIcon.style.opacity = progress * 0.9;
+      okIcon.style.transform = `translate(-50%, -50%) scale(${0.5 + progress * 0.5})`;
+      ngIcon.style.opacity = 0;
+    }
+  }, { passive: true });
+
+  card.addEventListener('touchend', () => {
+    if (!isDragging) return;
+    isDragging = false;
+
+    if (Math.abs(currentX) > threshold) {
+      const direction = currentX > 0 ? 'right' : 'left';
+      flyOut(card, direction);
+    } else {
+      // 戻す
+      card.classList.add('animate');
+      card.style.transform = 'translateX(0) translateY(0) rotate(0deg)';
+      card.querySelector('.overlay-ng').style.opacity = 0;
+      card.querySelector('.overlay-ok').style.opacity = 0;
+      setTimeout(() => card.classList.remove('animate'), 400);
+    }
+  });
+}
+
+function flyOut(card, direction) {
+  const flyX = direction === 'right' ? window.innerWidth * 1.5 : -window.innerWidth * 1.5;
+  const rotate = direction === 'right' ? 30 : -30;
+
+  card.classList.add('animate');
+  card.style.transform = `translateX(${flyX}px) rotate(${rotate}deg)`;
+  card.style.opacity = '0';
+
+  if (direction === 'right') {
+    favorites.push(images[currentIndex]);
+  }
+
+  setTimeout(() => {
+    card.remove();
+    currentIndex++;
+    updateProgress();
+    updateCounter();
+    createCard();
+  }, 350);
+}
+
+// ボタン操作
+document.getElementById('btn-ng').addEventListener('click', () => {
+  if (cardEl && currentIndex < 10) flyOut(cardEl, 'left');
+});
+document.getElementById('btn-ok').addEventListener('click', () => {
+  if (cardEl && currentIndex < 10) flyOut(cardEl, 'right');
+});
+
+// 結果画面
+function showResult() {
+  const result = document.getElementById('result');
+  favoritesEl.innerHTML = '';
+
+  if (favorites.length > 0) {
+    favorites.forEach(src => {
+      const img = document.createElement('img');
+      img.src = src;
+      img.className = 'fav-img';
+      favoritesEl.appendChild(img);
+    });
+  } else {
+    const p = document.createElement('p');
+    p.className = 'no-fav';
+    p.textContent = 'ピンとくる84kenはいなかったみたい...';
+    favoritesEl.appendChild(p);
+  }
+
+  result.classList.add('show');
+}
+
+// スタート
+document.getElementById('start-btn').addEventListener('click', () => {
+  document.getElementById('intro').classList.add('hide');
+  setTimeout(() => {
+    document.getElementById('intro').style.display = 'none';
+  }, 500);
+  initGame();
+});
+
+// リトライ
+document.getElementById('retry-btn').addEventListener('click', () => {
+  const result = document.getElementById('result');
+  result.classList.remove('show');
+  result.style.display = 'none';
+  // 既存カード削除
+  cardArea.querySelectorAll('.card').forEach(c => c.remove());
+  initGame();
+});
+</script>
+</body>
+</html>
