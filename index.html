@@ -140,7 +140,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 10px 20px 20px;
+    padding: 10px 20px 30px;
   }
 
   .card {
@@ -148,7 +148,7 @@
     width: calc(100vw - 40px);
     max-width: 400px;
     aspect-ratio: 3/4;
-    max-height: calc(100dvh - 180px);
+    max-height: calc(100dvh - 100px);
     border-radius: 16px;
     overflow: hidden;
     background: #2a2a3e;
@@ -216,38 +216,61 @@
     100% { opacity: 0; transform: translate(-50%, -60%) scale(1.1); }
   }
 
-  /* 下部ボタン */
-  #buttons {
-    padding: 10px 40px 30px;
+  /* 初回スワイプヒント */
+  #swipe-guide {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
     display: flex;
-    justify-content: center;
-    gap: 50px;
-  }
-  .btn {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    border: 3px solid;
-    background: transparent;
-    display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: transform 0.15s, background 0.15s;
+    padding: 0 24px;
+    opacity: 0;
+    animation: guideIn 0.5s 0.6s ease-out forwards;
   }
-  .btn:active { transform: scale(0.9); }
-  .btn-ng {
-    border-color: #ff4757;
-    color: #ff4757;
+  #swipe-guide.fade-out {
+    animation: guideOut 0.4s ease-out forwards;
   }
-  .btn-ng:active { background: rgba(255,71,87,0.15); }
-  .btn-ok {
-    border-color: #2ed573;
-    color: #2ed573;
+  @keyframes guideIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
-  .btn-ok:active { background: rgba(46,213,115,0.15); }
+  @keyframes guideOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  .guide-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .guide-icon {
+    font-size: 40px;
+    font-weight: 900;
+  }
+  .guide-icon.ng { color: #ff4757; }
+  .guide-icon.ok { color: #2ed573; }
+  .guide-label {
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+    font-weight: 600;
+  }
+  .guide-arrow {
+    font-size: 22px;
+    animation: arrowBounce 1s ease-in-out infinite;
+  }
+  .guide-side:first-child .guide-arrow { animation: arrowBounceLeft 1s ease-in-out infinite; }
+  .guide-side:last-child .guide-arrow { animation: arrowBounceRight 1s ease-in-out infinite; }
+  @keyframes arrowBounceLeft {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(-8px); }
+  }
+  @keyframes arrowBounceRight {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(8px); }
+  }
 
   /* 結果画面 */
   #result {
@@ -364,9 +387,19 @@
   <div id="card-area">
     <div id="counter"></div>
   </div>
-  <div id="buttons">
-    <button class="btn btn-ng" id="btn-ng">✕</button>
-    <button class="btn btn-ok" id="btn-ok">○</button>
+</div>
+
+<!-- 初回スワイプガイド -->
+<div id="swipe-guide" style="display:none;">
+  <div class="guide-side">
+    <div class="guide-arrow">←</div>
+    <div class="guide-icon ng">✕</div>
+    <div class="guide-label">NG</div>
+  </div>
+  <div class="guide-side">
+    <div class="guide-label">OK!</div>
+    <div class="guide-icon ok">○</div>
+    <div class="guide-arrow">→</div>
   </div>
 </div>
 
@@ -481,6 +514,7 @@ function initGame() {
 
   updateCounter();
   createCard();
+  showSwipeGuide();
 }
 
 function updateCounter() {
@@ -653,6 +687,7 @@ function showSwipeEmoji(direction) {
 }
 
 function flyOut(card, direction, velocity) {
+  hideSwipeGuide();
   const speed = Math.max(Math.abs(velocity || 0), 0.8);
   const flyX = direction === 'right' ? window.innerWidth * 1.5 : -window.innerWidth * 1.5;
   const rotate = direction === 'right' ? 20 + speed * 10 : -(20 + speed * 10);
@@ -676,13 +711,28 @@ function flyOut(card, direction, velocity) {
   }, 350);
 }
 
-// ボタン操作
-document.getElementById('btn-ng').addEventListener('click', () => {
-  if (cardEl && currentIndex < 10) flyOut(cardEl, 'left', 1);
-});
-document.getElementById('btn-ok').addEventListener('click', () => {
-  if (cardEl && currentIndex < 10) flyOut(cardEl, 'right', 1);
-});
+// 初回スワイプガイド表示
+let guideShown = false;
+function showSwipeGuide() {
+  if (guideShown) return;
+  guideShown = true;
+  const guide = document.getElementById('swipe-guide');
+  guide.style.display = 'flex';
+  // 最初のスワイプ or 3秒後に消す
+  setTimeout(() => {
+    if (guide.style.display !== 'none') {
+      guide.classList.add('fade-out');
+      setTimeout(() => { guide.style.display = 'none'; }, 400);
+    }
+  }, 3000);
+}
+function hideSwipeGuide() {
+  const guide = document.getElementById('swipe-guide');
+  if (guide.style.display !== 'none' && !guide.classList.contains('fade-out')) {
+    guide.classList.add('fade-out');
+    setTimeout(() => { guide.style.display = 'none'; }, 400);
+  }
+}
 
 // 結果画面
 function showResult() {
