@@ -153,10 +153,19 @@
     overflow: hidden;
     background: #2a2a3e;
     box-shadow: 0 10px 40px rgba(0,0,0,0.4);
-    will-change: transform;
-    transition: none;
+    will-change: transform, box-shadow;
+    transition: box-shadow 0.2s;
+  }
+  .card.grabbing {
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    cursor: grabbing;
   }
   .card.animate {
+    transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+                opacity 0.4s ease-out,
+                box-shadow 0.3s;
+  }
+  .card.fly-out {
     transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
                 opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -454,26 +463,68 @@ function createCard() {
 }
 
 function setupSwipe(card) {
-  let startX = 0, startY = 0, currentX = 0, isDragging = false;
-  const threshold = 80;
+  let startX = 0, startY = 0, currentX = 0, currentY = 0;
+  let isDragging = false, touchYRatio = 0.5;
+  let velocityX = 0, lastX = 0, lastTime = 0;
+  const threshold = 70;
 
   card.addEventListener('touchstart', (e) => {
     isDragging = true;
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
+    const touch = e.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
     currentX = 0;
-    card.style.transition = 'none';
+    currentY = 0;
+    velocityX = 0;
+    lastX = startX;
+    lastTime = Date.now();
+
+    // タッチ位置のY比率（上=0, 下=1）→回転の支点に使う
+    const rect = card.getBoundingClientRect();
+    touchYRatio = (touch.clientY - rect.top) / rect.height;
+
+    // 掴んだ感 - 少し持ち上げる
+    card.style.transition = 'transform 0.15s ease-out, box-shadow 0.15s';
+    card.classList.add('grabbing');
+    card.style.transform = 'scale(1.02)';
+    requestAnimationFrame(() => {
+      card.style.transition = 'none';
+    });
   }, { passive: true });
 
   card.addEventListener('touchmove', (e) => {
     if (!isDragging) return;
-    const dx = e.touches[0].clientX - startX;
-    const dy = e.touches[0].clientY - startY;
+    const touch = e.touches[0];
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
     currentX = dx;
+    currentY = dy;
 
-    const rotate = dx * 0.08;
-    const moveY = Math.abs(dx) * 0.05;
-    card.style.transform = `translateX(${dx}px) translateY(${-moveY}px) rotate(${rotate}deg)`;
+    // 速度計算（フリック検知用）
+    const now = Date.now();
+    const dt = now - lastTime;
+    if (dt > 0) {
+      velocityX = (touch.clientX - lastX) / dt;
+      lastX = touch.clientX;
+      lastTime = now;
+    }
+
+    // タッチ位置で回転量が変わる（上を掴むと大きく回転、下を掴むと小さく回転）
+    const rotateMultiplier = 0.06 + (1 - touchYRatio) * 0.08;
+    const rotate = dx * rotateMultiplier;
+
+    // Y方向も少し追従（指についてくる感）
+    const moveY = dy * 0.3;
+
+    card.style.transform = `translateX(${dx}px) translateY(${moveY}px) rotate(${rotate}deg) scale(1.02)`;
+
+    // 背景カードも連動
+    const nextCard = cardArea.querySelector('.card-next');
+    if (nextCard) {
+      const p = Math.min(Math.abs(dx) / 200, 1);
+      nextCard.style.transform = `scale(${0.95 + p * 0.05})`;
+      nextCard.style.opacity = `${0.5 + p * 0.5}`;
+    }
 
     // オーバーレイ表示
     const ngIcon = card.querySelector('.overlay-ng');
@@ -488,32 +539,51 @@ function setupSwipe(card) {
       okIcon.style.opacity = progress * 0.9;
       okIcon.style.transform = `translate(-50%, -50%) scale(${0.5 + progress * 0.5})`;
       ngIcon.style.opacity = 0;
+    } else {
+      ngIcon.style.opacity = 0;
+      okIcon.style.opacity = 0;
     }
   }, { passive: true });
 
   card.addEventListener('touchend', () => {
     if (!isDragging) return;
     isDragging = false;
+    card.classList.remove('grabbing');
 
-    if (Math.abs(currentX) > threshold) {
+    // フリック判定（速度が速ければ閾値が低くてもOK）
+    const flicked = Math.abs(velocityX) > 0.5;
+    const shouldSwipe = Math.abs(currentX) > threshold || (flicked && Math.abs(currentX) > 30);
+
+    if (shouldSwipe) {
       const direction = currentX > 0 ? 'right' : 'left';
-      flyOut(card, direction);
+      flyOut(card, direction, velocityX);
     } else {
-      // 戻す
+      // スプリングで戻す
       card.classList.add('animate');
-      card.style.transform = 'translateX(0) translateY(0) rotate(0deg)';
+      card.style.transform = 'translateX(0) translateY(0) rotate(0deg) scale(1)';
       card.querySelector('.overlay-ng').style.opacity = 0;
       card.querySelector('.overlay-ok').style.opacity = 0;
-      setTimeout(() => card.classList.remove('animate'), 400);
+
+      // 背景カードも戻す
+      const nextCard = cardArea.querySelector('.card-next');
+      if (nextCard) {
+        nextCard.style.transition = 'transform 0.4s, opacity 0.4s';
+        nextCard.style.transform = 'scale(0.95)';
+        nextCard.style.opacity = '0.5';
+        setTimeout(() => { nextCard.style.transition = ''; }, 400);
+      }
+
+      setTimeout(() => card.classList.remove('animate'), 500);
     }
   });
 }
 
-function flyOut(card, direction) {
+function flyOut(card, direction, velocity) {
+  const speed = Math.max(Math.abs(velocity || 0), 0.8);
   const flyX = direction === 'right' ? window.innerWidth * 1.5 : -window.innerWidth * 1.5;
-  const rotate = direction === 'right' ? 30 : -30;
+  const rotate = direction === 'right' ? 20 + speed * 10 : -(20 + speed * 10);
 
-  card.classList.add('animate');
+  card.classList.add('fly-out');
   card.style.transform = `translateX(${flyX}px) rotate(${rotate}deg)`;
   card.style.opacity = '0';
 
@@ -532,10 +602,10 @@ function flyOut(card, direction) {
 
 // ボタン操作
 document.getElementById('btn-ng').addEventListener('click', () => {
-  if (cardEl && currentIndex < 10) flyOut(cardEl, 'left');
+  if (cardEl && currentIndex < 10) flyOut(cardEl, 'left', 1);
 });
 document.getElementById('btn-ok').addEventListener('click', () => {
-  if (cardEl && currentIndex < 10) flyOut(cardEl, 'right');
+  if (cardEl && currentIndex < 10) flyOut(cardEl, 'right', 1);
 });
 
 // 結果画面
