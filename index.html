@@ -118,6 +118,41 @@
   }
   #start-btn:active { transform: scale(0.95); }
 
+  /* 新着通知バブル */
+  .new-submissions-bubble {
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 2px solid rgba(255,255,255,0.4);
+    border-radius: 20px;
+    padding: 12px 24px;
+    margin-bottom: 30px;
+    font-size: 15px;
+    font-weight: 600;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    animation: bubblePop 0.6s ease-out, bubbleFloat 2s ease-in-out infinite 0.6s;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  }
+  .new-submissions-bubble .bubble-icon {
+    font-size: 20px;
+    animation: sparkle 1.5s ease-in-out infinite;
+  }
+  @keyframes bubblePop {
+    0% { transform: scale(0); opacity: 0; }
+    60% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes bubbleFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  @keyframes sparkle {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    50% { transform: scale(1.2) rotate(10deg); }
+  }
+
   /* メイン画面 */
   #app {
     position: relative;
@@ -434,6 +469,10 @@
 <div id="intro">
   <h1>あなたの84kenに<br>出会えるかも</h1>
   <p>〜理想の84kenに出会えるマッチングアプリ〜</p>
+  <div id="new-submissions-bubble" class="new-submissions-bubble">
+    <span class="bubble-icon">✨</span>
+    <span id="bubble-text"></span>
+  </div>
   <div class="swipe-hint">
     <div class="hint-item">
       <div class="hint-icon ng">✕</div>
@@ -519,8 +558,8 @@ const imageGroups = [
   { group: 'M', files: ['DSC05867.jpg', 'DSC05914.jpg'] },
   { group: 'N', files: ['A7408284.jpg', 'A7408299.jpg', 'A7408393.jpg'] },
   { group: 'O', files: ['84ken-saisai-17.jpg', '84ken-saisai-34.jpg', '84ken-saisai-43.jpg', '84ken-saisai-50.jpg', '84ken-saisai-62.jpg'] },
-  // --- ユーザー投稿写真（承認済み）はここに追加 ---
-  // 例: { group: 'U', files: ['user/user_001.jpg'], name: 'タロウ', comment: '川で最高の一枚' },
+  // --- ユーザー投稿写真（承認済み） ---
+  { group: 'U1', files: ['user_001_mammy.jpeg'], name: 'mammy', comment: '推しに会えた嬉しさ', addedDate: '2026-03-12' },
 ];
 
 // ファイル→グループのマップ & ファイル→メタ情報のマップ
@@ -540,29 +579,45 @@ function shuffle(arr) {
   return a;
 }
 
-// 同グループが連続しない10枚を選ぶ
-function selectDiverseImages(count) {
-  // 各グループから1枚ずつランダムに選ぶ（まずグループの多様性を確保）
-  const shuffledGroups = shuffle(imageGroups);
-  let pool = shuffledGroups.map(g => {
-    const shuffled = shuffle(g.files);
-    return shuffled[0];
-  });
-  // 15グループあるので余裕がある。10枚選ぶ
-  pool = shuffle(pool).slice(0, count);
+// ユーザー投稿グループ（U始まり）を判定
+function isUserGroup(g) { return g.group.startsWith('U'); }
 
-  // 同グループが連続しないように並べ替え
-  const result = [pool.shift()];
-  while (pool.length > 0 && result.length < count) {
-    const lastGroup = fileToGroup[result[result.length - 1]];
+// 新着投稿の数（2日以内）
+function countNewSubmissions() {
+  return imageGroups.filter(isNewUserGroup).length;
+}
+
+// 新着ユーザー投稿かどうか（2日以内）
+function isNewUserGroup(g) {
+  if (!isUserGroup(g) || !g.addedDate) return false;
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  return new Date(g.addedDate) >= twoDaysAgo;
+}
+
+// 同グループが連続しない10枚を選ぶ（新着ユーザー投稿は先頭に配置）
+function selectDiverseImages(count) {
+  const newUserGroups = imageGroups.filter(isNewUserGroup);
+  const userPicks = shuffle(newUserGroups).map(g => shuffle(g.files)[0]);
+  const remainingGroups = imageGroups.filter(g => !isNewUserGroup(g));
+
+  const normalCount = count - userPicks.length;
+  const shuffledGroups = shuffle(remainingGroups);
+  let pool = shuffledGroups.map(g => shuffle(g.files)[0]);
+  pool = shuffle(pool).slice(0, normalCount);
+
+  // 同グループ連続しないよう並べ替え
+  const sorted = [pool.shift()];
+  while (pool.length > 0 && sorted.length < normalCount) {
+    const lastGroup = fileToGroup[sorted[sorted.length - 1]];
     const diffIdx = pool.findIndex(f => fileToGroup[f] !== lastGroup);
     if (diffIdx >= 0) {
-      result.push(pool.splice(diffIdx, 1)[0]);
+      sorted.push(pool.splice(diffIdx, 1)[0]);
     } else {
-      result.push(pool.shift());
+      sorted.push(pool.shift());
     }
   }
-  return result;
+
+  return [...userPicks, ...sorted];
 }
 
 let images = [];
@@ -846,6 +901,17 @@ function showResult() {
 
   result.classList.add('show');
 }
+
+// 新着通知バブル表示
+(function showNewSubmissionsBubble() {
+  const count = countNewSubmissions();
+  if (count > 0) {
+    const bubble = document.getElementById('new-submissions-bubble');
+    const text = document.getElementById('bubble-text');
+    text.textContent = `新しい「みんなの84ken」が${count}枚増えました！`;
+    bubble.style.display = 'flex';
+  }
+})();
 
 // スタート
 document.getElementById('start-btn').addEventListener('click', () => {
